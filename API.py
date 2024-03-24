@@ -1,13 +1,12 @@
+from zipfile import ZipFile
+from fastapi import FastAPI, Body, File, UploadFile
 import shutil
-from fastapi import FastAPI, Depends, Path, File, UploadFile
-from pkgutil import get_data
-from typing import List
+from fastapi import FastAPI, Depends, File, UploadFile
 from fastapi import FastAPI, HTTPException
 import random
 import string
 from fastapi.responses import FileResponse
 import os
-from numpy import delete
 from core import speech_to_text, text_generative_model, text_to_speech, text_to_video
 from pydantic import BaseModel
 from fastapi import Depends, Query, Body
@@ -15,6 +14,12 @@ from pymongo import MongoClient
 from bson import ObjectId
 from utils import assets_dir, push_new_asset
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+from fastapi import FastAPI, Body, File, UploadFile
+from zipfile import ZipFile
+import tempfile
+import os
+load_dotenv()
 
 
 def random_string(length=7):
@@ -55,7 +60,14 @@ class Job:
 
 
 app = FastAPI()
-app.add_middleware(CORSMiddleware)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Replace with your allowed origins
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition"],  # Add the exposedHeaders option
+)
 
 
 class TextToSpeechBody(BaseModel):
@@ -81,7 +93,7 @@ def route(body: SpeechToTextBody):
 
     result = speech_to_text(asset_file_path)
 
-    return {"result": result["text"]}
+    return {"text": result["text"]}
 
 
 class TextGenerativeModelBody(BaseModel):
@@ -153,23 +165,56 @@ async def upload_file(file: UploadFile = File(...)):
     file_path = file.filename
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    asset_id = push_new_asset(file_path, delete_orig_file=True)
+    asset_id = push_new_asset(file_path, file.filename,  delete_orig_file=True)
     return {"filename": file.filename, "asset_id": asset_id}
 
 
-def find_asset_file_path(asset_id: int):
+def find_asset_file_path(asset_id: str):
     existing_filenames = os.listdir(assets_dir)
-    tmp = [f for f in existing_filenames if f.split('.')[0] == asset_id]
+    tmp = [f for f in existing_filenames if f.split('-')[0] == asset_id]
     if len(tmp) == 0:
-        return None
+        return None, None
     else:
-        return os.path.join(assets_dir, tmp[0])
+        # return type: abs file path , filename (including extension)
+        return os.path.join(assets_dir, tmp[0]), tmp[0]
 
 
 @app.get("/files/{file_id}")
 def download_file(file_id):
-    file_path = find_asset_file_path(str(file_id))
+    file_path, filename = find_asset_file_path(str(file_id))
     if file_path == None:
         raise HTTPException(
             status_code=404, detail=f"could not find an asset with asset_id = {file_id}")
-    return FileResponse(file_path)
+    return FileResponse(file_path, filename=filename)
+
+
+@app.get("/create_zip")
+async def create_zip(asset_ids: list[int] = Query(...)):
+    """
+    Creates a zip file from a list of asset_ids 
+
+    Args:
+        files (list[int]): A list of asset ids 
+
+    Returns:
+        FileResponse: A zip file containing the specified files.
+    """
+    abs_file_paths = [find_asset_file_path(
+        str(asset_id))[0] for asset_id in asset_ids]
+    print(asset_ids)
+    try:
+        archive_path = "/tmp/archive" + random_string() + ".zip"
+        with ZipFile(archive_path, "w") as zip_file:
+            for file_path in abs_file_paths:
+                # Add the file to the zip
+                zip_file.write(file_path, os.path.basename(file_path))
+
+        response = FileResponse(
+            path=archive_path,
+            media_type="application/zip",
+            filename="archive.zip"
+        )
+        return response
+
+    except Exception as e:
+        return {"error": str(e)}

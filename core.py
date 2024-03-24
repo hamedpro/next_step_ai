@@ -54,7 +54,7 @@ def text_to_video(text):
 
     out.release()
     asset_id = push_new_asset(
-        './output.mp4', delete_orig_file=True)
+        './output.mp4', "output.mp4",  delete_orig_file=True)
     return asset_id
 
 
@@ -66,7 +66,7 @@ def text_to_speech(text):
 
     sf.write("output.wav", wav, 22050)
     asset_id = push_new_asset(
-        './output.wav', delete_orig_file=True)
+        './output.wav', "output.wav",  delete_orig_file=True)
     return asset_id
 
 

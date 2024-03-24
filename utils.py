@@ -7,20 +7,19 @@ if not os.path.exists(assets_dir):
     os.makedirs(assets_dir)
 
 
-def push_new_asset(filepath, delete_orig_file=False):
+def push_new_asset(filepath, filename,  delete_orig_file=False):
     # Find filenames matching the pattern
     file_numbers = []
-    for filename in os.listdir(assets_dir):
-        file_numbers.append(int(filename.split(".")[0]))
+    for f in os.listdir(assets_dir):
+        file_numbers.append(int(f.split("-")[0]))
 
     # Print the maximum number, handling the empty list case
     if file_numbers:
         max_number = max(file_numbers)
     else:
         max_number = 0
-
     copyfile(filepath, os.path.join(
-        assets_dir, f"{max_number + 1}.{filepath.split('.')[-1]}"))
+        assets_dir, f"{max_number + 1}-{filename}"))
 
     """ assets_json_filepath  = os.path.expanduser('~/next_step_assets.json')		
 	if not os.path.exists(assets_json_filepath):
